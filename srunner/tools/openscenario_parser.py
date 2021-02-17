@@ -20,6 +20,10 @@ import operator
 import py_trees
 import carla
 
+import rospy
+from geometry_msgs.msg import PoseStamped
+from tf.transformations import quaternion_from_euler
+
 from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
 from srunner.scenariomanager.weather_sim import Weather
 from srunner.scenariomanager.scenarioatomics.atomic_behaviors import (TrafficLightStateSetter,
@@ -1137,6 +1141,33 @@ class OpenScenarioParser(object):
                     osc_position = route_action.find('Position')
                     waypoints = [(osc_position, 'fastest')]
                     atomic = ChangeActorWaypoints(actor, waypoints=waypoints, name=maneuver_name)
+                elif private_action.find('AdAgentRouteAction') is not None:
+                    # Custom action for ad agent
+
+                    # Get waypoint from xosc file and extract position
+                    position = private_action.find('AdAgentRouteAction')
+                    world_position = (position[0][0]).attrib
+
+                    # Create publisher for ROS
+                    pub = rospy.Publisher('/carla/ego_vehicle/goal', PoseStamped, queue_size=10)
+                    rospy.init_node('ad_waypoint_publisher')
+
+                    # Parse the goal coordinate to the ROS message
+                    pose_stamped = PoseStamped()
+                    pose_stamped.pose.position.x = float(world_position["x"])
+                    pose_stamped.pose.position.y = float(world_position["y"])
+                    pose_stamped.pose.position.z = float(world_position["z"])
+
+                    quaterion_orientation = quaternion_from_euler(0, 0, float(float(world_position["h"])))
+                    pose_stamped.pose.orientation.x = quaterion_orientation[0]
+                    pose_stamped.pose.orientation.y = quaterion_orientation[1]
+                    pose_stamped.pose.orientation.z = quaterion_orientation[2]
+                    pose_stamped.pose.orientation.w = quaterion_orientation[3]
+
+                    # Publish the message
+                    pub.publish(pose_stamped)
+
+                    return Idle(duration=0, name=maneuver_name)
                 else:
                     raise AttributeError("Unknown private routing action")
             else:
